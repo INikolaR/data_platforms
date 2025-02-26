@@ -13,6 +13,10 @@ sed -i "s/host_to_insert/$1/g" /etc/nginx/sites-available/ya
 sed -i "s/port_to_insert/$2/g" /etc/nginx/sites-available/dh
 sed -i "s/host_to_insert/$1/g" /etc/nginx/sites-available/dh
 
+rm -f /etc/nginx/sites-enabled/nn
+rm -f /etc/nginx/sites-enabled/ya
+rm -f /etc/nginx/sites-enabled/dh
+
 ln -s /etc/nginx/sites-available/nn /etc/nginx/sites-enabled/nn
 ln -s /etc/nginx/sites-available/ya /etc/nginx/sites-enabled/ya
 ln -s /etc/nginx/sites-available/dh /etc/nginx/sites-enabled/dh
