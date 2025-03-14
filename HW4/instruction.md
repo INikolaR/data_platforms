@@ -16,7 +16,7 @@ ${jn-ip}, ${nn-ip}, ${dn-00-ip} и ${dn-01-ip} - ip-адреса всех эти
 
 ```
 sudo apt install python3-venv
-sudo apt-install python3-pip
+sudo apt install python3-pip
 ```
 
 Это поможет установить необходимые библиотеки.
@@ -24,7 +24,7 @@ sudo apt-install python3-pip
 Переключимся на пользователя hadoop:
 
 ```
-sudo -i -u ${hadoop}@${jn}
+sudo -i -u hadoop
 ```
 
 Скачаем spark:
@@ -34,26 +34,18 @@ wget https://archive.apache.org/dist/spark/spark-3.5.3/spark-3.5.3-bin-hadoop3.t
 tar -xzvf spark-3.5.3-bin-hadoop3.tgz
 ```
 
-Настроим переменные окружения:
+Настроим переменные окружения. Добавим в .profile строки:
 
 ```
 export HADOOP_CONF_DIR="/home/hadoop/hadoop-3.4.0/etc/hadoop"
-export HIVE_HOME="/home/hadoop/apache-hive-4.0.1-bin"
-export HIVE_CONF_DIR=$HIVE_HOME/conf
-export HIVE_AUX_JARS_PATH=$HIVE_HOME/lib/*
-export PATH=$PATH:$HIVE_HOME/bin
-```
-
-И ещё немного переменных окружения:
-
-```
 export SPARK_LOCAL_IP=${jn-ip}
 export SPARK_DIST_CLASSPATH="/home/hadoop/spark-3.5.3-bin-hadoop3/jars/*:/home/hadoop/hadoop-3.4.0/etc/hadoop:/home/hadoop/hadoop-3.4.0/share/hadoop/common/lib/*:/home/hadoop/hadoop-3.4.0/share/hadoop/common/*:/home/hadoop/hadoop-3.4.0/share/hadoop/hdfs:/home/hadoop/hadoop-3.4.0/share/hadoop/hdfs/lib/*:/home/hadoop/hadoop-3.4.0/share/hadoop/hdfs/*:/home/hadoop/hadoop-3.4.0/share/hadoop/mapreduce/*:/home/hadoop/hadoop-3.4.0/share/hadoop/yarn:/home/hadoop/hadoop-3.4.0/share/hadoop/yarn/lib/*:/home/hadoop/hadoop-3.4.0/share/hadoop/yarn/*:/home/hadoop/apache-hive-4.0.0-alpha-2-bin/*:/home/hadoop/apache-hive-4.0.0-alpha-2-bin/lib/*"
-cd spark-3.5.3-bin-hadoop3/
-export SPARK_HOME=`pwd`
-export PYTHONPATH=$(ZIPS=("$SPARK_HOME"/python/lib/+.zip); IFS=:; echo "${ZIPS[+]}"):SPYTHONPATH
-export PATH-SSPARK_HOME/bin:SPATH
+export SPARK_HOME="/home/hadoop/spark-3.5.3-bin-hadoop3"
+export PYTHONPATH=$(ZIPS=("$SPARK_HOME"/python/lib/*.zip); IFS=:; echo "${ZIPS[*]}"):$PYTHONPATH
+export PATH=$SPARK_HOME/bin:$PATH
 ```
+
+важно: ${jn-ip} заменить на значение. Такие переменные, как SPARK_HOME, здесь не устанавливаются, так как они были установлены в предыдущем семинаре.
 
 Вернёмся в ~:
 
@@ -96,18 +88,25 @@ hdfs dfs -ls /
 
 ```
 hdfs dfs -mkdir /input
+hdfs dfs -chmod g+w /input
 ```
 
-Пусть мы хотим с помощью spark обработать файл titanic.csv, который лежит в директории ~. Положим этот файл в hdfs
+Пусть мы хотим с помощью spark обработать файл titanic.csv, который лежит в директории ~.
 
 ```
-hdsf dfs -put titanic.csv /input
+wget https://github.com/INikolaR/data_platforms/raw/master/titanic.csv
+```
+
+Положим этот файл в hdfs
+
+```
+hdfs dfs -put titanic.csv /input
 ```
 
 Проверим, что файл появился:
 
 ```
-hdfs dfs -ls /
+hdfs dfs -ls /input
 ```
 
 # Обработка с помощью ipython
@@ -128,28 +127,59 @@ from onetl.connection import Hive
 from onetl.file import FileDFReader
 from onetl.file.format import CSV
 from onetl.db import DBWriter
-spark = SparkSession.builder.master("yarn").appName("spark-with-yarn").config("spark.sql.warehouse.dir", "/user/hive/warehouse").config("spark.hive.metastore.uris", "thrift://${jn}:5432").enableHiveSupport().getOrCreate()
+spark = SparkSession.builder.master("yarn").appName("spark-with-yarn").config("spark.sql.warehouse.dir", "/user/hive/warehouse").config("spark.hive.metastore.uris", "thrift://jn:5433").enableHiveSupport().getOrCreate()
 ```
 
-важно: вместо ${jn} нужно вставить его знчение.
+важно: вместо ${jn} нужно вставить его знчение. У меня в предыдущем семинаре hive был запущен на 5433 порту, поэтому я подключаюсь к нему.
 
 ```
-hdfs = SparkHDFS(host="tmpl-nn", port=9000, spark=spark, cluster="test")
+hdfs = SparkHDFS(host="nn", port=9000, spark=spark, cluster="test")
 hdfs.check()
 ```
 
 Ожидаем вывод в духе:
 
 ```
-SparkHDFS(cluster='test', host='tmpl-nn', ipc_port=9000)
+SparkHDFS(cluster='test', host='nn', ipc_port=9000)
 ```
 
-Выполняем:
+Выполняем чтение и применяем 2 трансформации: фильтрация по возрасту и конвертирование возраста в double
 
 ```
 reader = FileDFReader(connection=hdfs, format=CSV(delimiter=",", header=True), source_path="/input")
-df = reader.run(["titanic.csv"])
+raw_df = reader.run(["titanic.csv"])
+transformed_df = raw_df \
+    .filter(raw_df["Age"] > 10) \
+    .withColumn("Age_double", F.col("Age").cast("double"))
+
+```
+
+Сохраняем с партицированием:
+
+```
 hive = Hive(spark=spark, cluster="test")
-writer = DBWriter(connection=hive, table="test.spark_partitions", options={"if_exists" : "replace_entire_table"})
+writer = DBWriter(
+    connection=hive,
+    table="test.spark_partitions",
+    options={
+        "if_exists": "replace_entire_table",
+        "partition_by": ["Sex"]
+    }
+)
 writer.run(df)
+```
+
+Выходим из ipython:
+
+```
+exit
+```
+
+Проверяем:
+
+```
+hive
+USE test;
+DESCRIBE FORMATTED spark_partitions;
+SELECT * FROM spark_partitions LIMIT 10;
 ```
