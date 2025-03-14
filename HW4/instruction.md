@@ -91,6 +91,8 @@ hdfs dfs -mkdir /input
 hdfs dfs -chmod g+w /input
 ```
 
+
+
 Пусть мы хотим с помощью spark обработать файл titanic.csv, который лежит в директории ~.
 
 ```
@@ -107,6 +109,30 @@ hdfs dfs -put titanic.csv /input
 
 ```
 hdfs dfs -ls /input
+```
+
+Также проверим, что база данных создана:
+
+```
+hdfs dfs -ls /user/hive/warehouse
+```
+
+Если директория пуста - создаём базу. Подключаемся к hive:
+
+```
+beeline -u jdbc:hive2://${jn}:5433 -n scott -p tiger
+```
+
+Создадим базу:
+
+```
+CREATE DATABASE test;
+```
+
+Закроем соединение:
+
+```
+ctrl+c
 ```
 
 # Обработка с помощью ipython
@@ -127,10 +153,10 @@ from onetl.connection import Hive
 from onetl.file import FileDFReader
 from onetl.file.format import CSV
 from onetl.db import DBWriter
-spark = SparkSession.builder.master("yarn").appName("spark-with-yarn").config("spark.sql.warehouse.dir", "/user/hive/warehouse").config("spark.hive.metastore.uris", "thrift://jn:5433").enableHiveSupport().getOrCreate()
+spark = SparkSession.builder.master("yarn").appName("spark-with-yarn").config("spark.sql.warehouse.dir", "/user/hive/warehouse").config("spark.hive.metastore.uris", "thrift://jn:9083").enableHiveSupport().getOrCreate()
 ```
 
-важно: вместо ${jn} нужно вставить его знчение. У меня в предыдущем семинаре hive был запущен на 5433 порту, поэтому я подключаюсь к нему.
+важно: вместо ${jn} нужно вставить его знчение.
 
 ```
 hdfs = SparkHDFS(host="nn", port=9000, spark=spark, cluster="test")
@@ -166,7 +192,7 @@ writer = DBWriter(
         "partition_by": ["Sex"]
     }
 )
-writer.run(df)
+writer.run(transformed_df)
 ```
 
 Выходим из ipython:
@@ -178,8 +204,7 @@ exit
 Проверяем:
 
 ```
-hive
-USE test;
-DESCRIBE FORMATTED spark_partitions;
+beeline -u jdbc:hive2://${jn}:5433 -n scott -p tiger
+DESCRIBE FORMATTED test.spark_partitions;
 SELECT * FROM spark_partitions LIMIT 10;
 ```
