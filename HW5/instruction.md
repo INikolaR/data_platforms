@@ -3,7 +3,7 @@
 ## Скачивание скриптов
 
 ```
-git clone https://github.com/INikolaR/data_platforms
+git clone https://github.com/INikolaR/data_platforms.git
 cd data_platforms/HW5
 ```
 
