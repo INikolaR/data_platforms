@@ -5,7 +5,7 @@ from onetl.connection import Hive
 from onetl.file import FileDFReader
 from onetl.file.format import CSV
 from onetl.db import DBWriter
-from perfect import flow, task
+from prefect import flow, task
 
 @task
 def get_spark():
