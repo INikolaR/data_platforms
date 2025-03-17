@@ -91,8 +91,6 @@ hdfs dfs -mkdir /input
 hdfs dfs -chmod g+w /input
 ```
 
-
-
 Пусть мы хотим с помощью spark обработать файл titanic.csv, который лежит в директории ~.
 
 ```
